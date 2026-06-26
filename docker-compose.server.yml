@@ -1,0 +1,14 @@
+services:
+  bait-server:
+    build:
+      context: .
+      dockerfile: crates/bait-server/Dockerfile
+    image: bait-server:local
+    container_name: bait-server
+    ports:
+      - "7979:7979"
+    environment:
+      BAIT_PORT: "7979"
+    volumes:
+      - ./remote-repo:/data/repo
+    restart: unless-stopped

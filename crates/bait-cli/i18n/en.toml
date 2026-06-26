@@ -1,0 +1,74 @@
+# BAIT — English messages
+# Keys used by the CLI via locale::t("key")
+
+init_success = "Initialised empty bait repository in {path}"
+init_exists  = "Repository already exists at {path}"
+
+add_staged   = "Staged {count} file(s)"
+add_no_match = "No files matched: {pattern}"
+
+save_success     = "Saved commit {hash}"
+save_nothing     = "Nothing to save (working copy is clean)"
+save_auto_snap   = "No files staged — snapshotting entire working copy"
+
+log_empty        = "No commits yet."
+log_commit_line  = "commit {hash}"
+log_rushi_line   = "rushi:   {name} <{email}>"
+log_narada_line  = "narada:  {name}"
+log_date_line    = "date:    {date}"
+log_msg_line     = "         {msg}"
+log_has_conflicts = "  (!) unresolved conflicts"
+
+status_clean         = "Working copy is clean — nothing to save."
+status_staged_header = "Staged (will be included in next save):"
+status_unstaged_header = "Unstaged changes:"
+status_untracked_header = "Untracked files (use 'bait add' to stage):"
+status_added     = "  added:    {path}"
+status_modified  = "  modified: {path}"
+status_deleted   = "  deleted:  {path}"
+status_untracked = "  {path}"
+
+diff_no_changes   = "No differences."
+diff_binary       = "Binary files differ: {path}"
+
+branch_created    = "Created branch '{name}'"
+branch_exists     = "Branch '{name}' already exists"
+branch_not_found  = "Branch '{name}' not found"
+branch_deleted    = "Deleted branch '{name}' (was {hash})"
+branch_list_current = "* {name}"
+branch_list_other   = "  {name}"
+
+switch_success    = "Switched to branch '{name}'"
+switch_not_found  = "No such branch: '{name}'"
+switch_dirty      = "Cannot switch — you have unstaged changes. Stage or save them first."
+switch_same       = "Already on '{name}'"
+
+merge_success     = "Merged '{from}' into '{onto}' — commit {hash}"
+merge_conflicts   = "Merge completed with conflicts in: {files}"
+merge_hint        = "  Resolve conflicts then run 'bait save' to record the result."
+merge_up_to_date  = "Already up to date."
+merge_no_ancestor = "No common ancestor found between '{a}' and '{b}'"
+
+undo_success      = "Undone: {op}"
+undo_nothing      = "Nothing to undo."
+
+clean_dry_header  = "Would delete the following branches (run with --yes to confirm):"
+clean_dry_item    = "  {name} ({hash})"
+clean_done        = "Deleted {count} branch(es)."
+clean_nothing     = "No branches to delete."
+clean_kept        = "Kept: {names}"
+
+remote_added      = "Remote '{name}' added → {url}"
+remote_exists     = "Remote '{name}' already exists"
+
+sync_no_remote    = "No remote configured. Use 'bait remote add <name> <url>' first."
+sync_local_done   = "Synced with local path: {path}"
+sync_remote_done  = "Synced with remote: {url}"
+sync_up_to_date   = "Already up to date."
+
+review_created    = "Review #{id} created on branch '{branch}'"
+review_list_empty = "No open reviews."
+
+err_not_a_repo    = "Not inside a bait repository. Run 'bait init' to create one."
+err_no_commits    = "No commits yet. Run 'bait save' first."
+err_detached_head = "HEAD is detached. Switch to a branch first."

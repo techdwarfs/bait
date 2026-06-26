@@ -1,0 +1,74 @@
+# BAIT — Hindi messages (हिन्दी)
+# ऋषि = rushi (लेखक), नारद = narada (समीक्षक)
+
+init_success = "{path} में नई bait रिपॉज़िटरी बनाई गई"
+init_exists  = "{path} में रिपॉज़िटरी पहले से मौजूद है"
+
+add_staged   = "{count} फ़ाइल(ें) स्टेज की गईं"
+add_no_match = "कोई फ़ाइल नहीं मिली: {pattern}"
+
+save_success     = "कमिट {hash} सेव किया गया"
+save_nothing     = "सेव करने के लिए कुछ नहीं (कार्यशील प्रति साफ़ है)"
+save_auto_snap   = "कोई फ़ाइल स्टेज नहीं — पूरी कार्यशील प्रति का स्नैपशॉट लिया जा रहा है"
+
+log_empty        = "अभी तक कोई कमिट नहीं।"
+log_commit_line  = "कमिट {hash}"
+log_rushi_line   = "ऋषि:     {name} <{email}>"
+log_narada_line  = "नारद:    {name}"
+log_date_line    = "दिनांक:  {date}"
+log_msg_line     = "         {msg}"
+log_has_conflicts = "  (!) अनसुलझे विवाद"
+
+status_clean         = "कार्यशील प्रति साफ़ है — सेव करने के लिए कुछ नहीं।"
+status_staged_header = "स्टेज की गई फ़ाइलें (अगले save में शामिल होंगी):"
+status_unstaged_header = "बिना स्टेज के बदलाव:"
+status_untracked_header = "अनट्रैक्ड फ़ाइलें ('bait add' से स्टेज करें):"
+status_added     = "  जोड़ा गया:    {path}"
+status_modified  = "  बदला गया:   {path}"
+status_deleted   = "  हटाया गया:  {path}"
+status_untracked = "  {path}"
+
+diff_no_changes   = "कोई अंतर नहीं।"
+diff_binary       = "बाइनरी फ़ाइलें अलग हैं: {path}"
+
+branch_created    = "शाखा '{name}' बनाई गई"
+branch_exists     = "शाखा '{name}' पहले से मौजूद है"
+branch_not_found  = "शाखा '{name}' नहीं मिली"
+branch_deleted    = "शाखा '{name}' हटाई गई (पहले थी {hash})"
+branch_list_current = "* {name}"
+branch_list_other   = "  {name}"
+
+switch_success    = "शाखा '{name}' पर स्विच किया गया"
+switch_not_found  = "ऐसी कोई शाखा नहीं: '{name}'"
+switch_dirty      = "स्विच नहीं हो सकता — बिना स्टेज के बदलाव हैं। पहले स्टेज या सेव करें।"
+switch_same       = "आप पहले से '{name}' पर हैं"
+
+merge_success     = "'{from}' को '{onto}' में मर्ज किया — कमिट {hash}"
+merge_conflicts   = "मर्ज में विवाद हैं: {files}"
+merge_hint        = "  विवाद सुलझाएँ, फिर परिणाम रिकॉर्ड करने के लिए 'bait save' चलाएँ।"
+merge_up_to_date  = "पहले से अप टू डेट।"
+merge_no_ancestor = "'{a}' और '{b}' के बीच कोई समान पूर्वज नहीं मिला"
+
+undo_success      = "पूर्ववत किया: {op}"
+undo_nothing      = "पूर्ववत करने के लिए कुछ नहीं।"
+
+clean_dry_header  = "निम्नलिखित शाखाएँ हटाई जाएंगी (पुष्टि के लिए --yes के साथ चलाएँ):"
+clean_dry_item    = "  {name} ({hash})"
+clean_done        = "{count} शाखा(एँ) हटाई गईं।"
+clean_nothing     = "हटाने के लिए कोई शाखा नहीं।"
+clean_kept        = "रखी गईं: {names}"
+
+remote_added      = "रिमोट '{name}' जोड़ा गया → {url}"
+remote_exists     = "रिमोट '{name}' पहले से मौजूद है"
+
+sync_no_remote    = "कोई रिमोट कॉन्फ़िगर नहीं। पहले 'bait remote add <नाम> <url>' चलाएँ।"
+sync_local_done   = "स्थानीय पथ से सिंक किया: {path}"
+sync_remote_done  = "रिमोट से सिंक किया: {url}"
+sync_up_to_date   = "पहले से अप टू डेट।"
+
+review_created    = "शाखा '{branch}' पर समीक्षा #{id} बनाई गई"
+review_list_empty = "कोई खुली समीक्षा नहीं।"
+
+err_not_a_repo    = "bait रिपॉज़िटरी के अंदर नहीं हैं। नई बनाने के लिए 'bait init' चलाएँ।"
+err_no_commits    = "अभी तक कोई कमिट नहीं। पहले 'bait save' चलाएँ।"
+err_detached_head = "HEAD अलग है। पहले किसी शाखा पर स्विच करें।"

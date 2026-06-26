@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (all targets)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  # Quick smoke test: init a repo, add a file, save, log.
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build bait binary
+        run: cargo build -p bait --release
+
+      - name: Smoke test — init, add, save, log
+        run: |
+          cd /tmp
+          mkdir smoke-repo && cd smoke-repo
+          echo "hello from bait" > hello.txt
+          $GITHUB_WORKSPACE/target/release/bait init
+          $GITHUB_WORKSPACE/target/release/bait add hello.txt
+          $GITHUB_WORKSPACE/target/release/bait save --message "first commit" \
+            --author "Aryabhata" --email "arya@iit.ac.in"
+          $GITHUB_WORKSPACE/target/release/bait log
+          $GITHUB_WORKSPACE/target/release/bait status
+
+  # Ensure Hindi locale compiles and runs (CI LANG trick).
+  i18n-test:
+    name: i18n Hindi
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build bait binary
+        run: cargo build -p bait --release
+      - name: Test Hindi output
+        env:
+          LANG: hi_IN.UTF-8
+        run: |
+          cd /tmp
+          mkdir hindi-repo && cd hindi-repo
+          $GITHUB_WORKSPACE/target/release/bait init
+          echo "namaste" > file.txt
+          $GITHUB_WORKSPACE/target/release/bait add file.txt
+          $GITHUB_WORKSPACE/target/release/bait save --message "पहला कमिट" \
+            --author "आर्यभट्ट"

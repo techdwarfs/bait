@@ -1,0 +1,74 @@
+# BAIT — Tamil messages (தமிழ்)
+# ரிஷி = rushi (ஆசிரியர்), நாரதர் = narada (மதிப்பாளர்)
+
+init_success = "{path} இல் புதிய bait களஞ்சியம் உருவாக்கப்பட்டது"
+init_exists  = "{path} இல் களஞ்சியம் ஏற்கனவே உள்ளது"
+
+add_staged   = "{count} கோப்பு(கள்) நிலைப்படுத்தப்பட்டன"
+add_no_match = "பொருந்தும் கோப்புகள் இல்லை: {pattern}"
+
+save_success     = "கமிட் {hash} சேமிக்கப்பட்டது"
+save_nothing     = "சேமிக்க எதுவும் இல்லை (பணிப்பிரதி சுத்தமாக உள்ளது)"
+save_auto_snap   = "நிலைப்படுத்தப்பட்ட கோப்புகள் இல்லை — முழு பணிப்பிரதியின் நகல் எடுக்கப்படுகிறது"
+
+log_empty        = "இன்னும் கமிட்கள் இல்லை."
+log_commit_line  = "கமிட் {hash}"
+log_rushi_line   = "ரிஷி:    {name} <{email}>"
+log_narada_line  = "நாரதர்: {name}"
+log_date_line    = "தேதி:    {date}"
+log_msg_line     = "         {msg}"
+log_has_conflicts = "  (!) தீர்க்கப்படாத முரண்பாடுகள்"
+
+status_clean         = "பணிப்பிரதி சுத்தமாக உள்ளது — சேமிக்க எதுவும் இல்லை."
+status_staged_header = "நிலைப்படுத்தப்பட்டவை (அடுத்த save இல் சேர்க்கப்படும்):"
+status_unstaged_header = "நிலைப்படுத்தப்படாத மாற்றங்கள்:"
+status_untracked_header = "கண்காணிக்கப்படாத கோப்புகள் ('bait add' பயன்படுத்தவும்):"
+status_added     = "  சேர்க்கப்பட்டது:   {path}"
+status_modified  = "  மாற்றப்பட்டது:    {path}"
+status_deleted   = "  நீக்கப்பட்டது:    {path}"
+status_untracked = "  {path}"
+
+diff_no_changes   = "வேறுபாடுகள் இல்லை."
+diff_binary       = "இரும கோப்புகள் வேறுபடுகின்றன: {path}"
+
+branch_created    = "கிளை '{name}' உருவாக்கப்பட்டது"
+branch_exists     = "கிளை '{name}' ஏற்கனவே உள்ளது"
+branch_not_found  = "கிளை '{name}' கிடைக்கவில்லை"
+branch_deleted    = "கிளை '{name}' நீக்கப்பட்டது ({hash} ஆக இருந்தது)"
+branch_list_current = "* {name}"
+branch_list_other   = "  {name}"
+
+switch_success    = "கிளை '{name}' க்கு மாற்றப்பட்டது"
+switch_not_found  = "அந்த கிளை இல்லை: '{name}'"
+switch_dirty      = "மாற்ற முடியாது — நிலைப்படுத்தப்படாத மாற்றங்கள் உள்ளன."
+switch_same       = "ஏற்கனவே '{name}' இல் உள்ளீர்கள்"
+
+merge_success     = "'{from}' ஐ '{onto}' இல் இணைத்தது — கமிட் {hash}"
+merge_conflicts   = "இணைப்பில் முரண்பாடுகள்: {files}"
+merge_hint        = "  முரண்பாடுகளை தீர்த்து 'bait save' இயக்கவும்."
+merge_up_to_date  = "ஏற்கனவே புதுப்பித்த நிலையில் உள்ளது."
+merge_no_ancestor = "'{a}' மற்றும் '{b}' க்கிடையே பொது மூதாதையர் இல்லை"
+
+undo_success      = "செயல் தவிர்க்கப்பட்டது: {op}"
+undo_nothing      = "தவிர்க்க எதுவும் இல்லை."
+
+clean_dry_header  = "பின்வரும் கிளைகள் நீக்கப்படும் (--yes மூலம் உறுதிப்படுத்தவும்):"
+clean_dry_item    = "  {name} ({hash})"
+clean_done        = "{count} கிளை(கள்) நீக்கப்பட்டன."
+clean_nothing     = "நீக்க கிளைகள் இல்லை."
+clean_kept        = "வைக்கப்பட்டவை: {names}"
+
+remote_added      = "ரிமோட் '{name}' சேர்க்கப்பட்டது → {url}"
+remote_exists     = "ரிமோட் '{name}' ஏற்கனவே உள்ளது"
+
+sync_no_remote    = "ரிமோட் இல்லை. முதலில் 'bait remote add <பெயர்> <url>' இயக்கவும்."
+sync_local_done   = "உள்ளூர் பாதையுடன் ஒத்திசைக்கப்பட்டது: {path}"
+sync_remote_done  = "ரிமோட்டுடன் ஒத்திசைக்கப்பட்டது: {url}"
+sync_up_to_date   = "ஏற்கனவே புதுப்பித்த நிலையில் உள்ளது."
+
+review_created    = "கிளை '{branch}' இல் மதிப்பாய்வு #{id} உருவாக்கப்பட்டது"
+review_list_empty = "திறந்த மதிப்பாய்வுகள் இல்லை."
+
+err_not_a_repo    = "bait களஞ்சியத்தில் இல்லை. 'bait init' இயக்கவும்."
+err_no_commits    = "இன்னும் கமிட்கள் இல்லை. முதலில் 'bait save' இயக்கவும்."
+err_detached_head = "HEAD பிரிக்கப்பட்டுள்ளது. முதலில் ஒரு கிளைக்கு மாறவும்."

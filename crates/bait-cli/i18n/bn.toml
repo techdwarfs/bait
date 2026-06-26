@@ -1,0 +1,74 @@
+# BAIT — Bengali messages (বাংলা)
+# ঋষি = rushi (লেখক), নারদ = narada (পর্যালোচক)
+
+init_success = "{path} তে নতুন bait রিপোজিটরি তৈরি হয়েছে"
+init_exists  = "{path} তে রিপোজিটরি ইতোমধ্যে বিদ্যমান"
+
+add_staged   = "{count} ফাইল স্টেজ করা হয়েছে"
+add_no_match = "কোনো ফাইল পাওয়া যায়নি: {pattern}"
+
+save_success     = "কমিট {hash} সংরক্ষণ করা হয়েছে"
+save_nothing     = "সংরক্ষণ করার কিছু নেই (ওয়ার্কিং কপি পরিষ্কার)"
+save_auto_snap   = "কোনো ফাইল স্টেজ করা নেই — পুরো ওয়ার্কিং ডিরেক্টরির স্ন্যাপশট নেওয়া হচ্ছে"
+
+log_empty        = "এখনো কোনো কমিট নেই।"
+log_commit_line  = "কমিট {hash}"
+log_rushi_line   = "ঋষি:     {name} <{email}>"
+log_narada_line  = "নারদ:   {name}"
+log_date_line    = "তারিখ:   {date}"
+log_msg_line     = "         {msg}"
+log_has_conflicts = "  (!) অনিষ্পন্ন দ্বন্দ্ব"
+
+status_clean         = "ওয়ার্কিং কপি পরিষ্কার — সংরক্ষণ করার কিছু নেই।"
+status_staged_header = "স্টেজ করা (পরের save তে অন্তর্ভুক্ত হবে):"
+status_unstaged_header = "স্টেজ না করা পরিবর্তন:"
+status_untracked_header = "অট্র্যাকড ফাইল ('bait add' ব্যবহার করুন):"
+status_added     = "  যোগ করা হয়েছে:   {path}"
+status_modified  = "  পরিবর্তিত:      {path}"
+status_deleted   = "  মুছে ফেলা হয়েছে: {path}"
+status_untracked = "  {path}"
+
+diff_no_changes   = "কোনো পার্থক্য নেই।"
+diff_binary       = "বাইনারি ফাইলে পার্থক্য: {path}"
+
+branch_created    = "শাখা '{name}' তৈরি হয়েছে"
+branch_exists     = "শাখা '{name}' ইতোমধ্যে বিদ্যমান"
+branch_not_found  = "শাখা '{name}' পাওয়া যায়নি"
+branch_deleted    = "শাখা '{name}' মুছে ফেলা হয়েছে ({hash} ছিল)"
+branch_list_current = "* {name}"
+branch_list_other   = "  {name}"
+
+switch_success    = "শাখা '{name}' তে স্যুইচ করা হয়েছে"
+switch_not_found  = "এই শাখা নেই: '{name}'"
+switch_dirty      = "স্যুইচ করা যাচ্ছে না — স্টেজ না করা পরিবর্তন আছে।"
+switch_same       = "আপনি ইতোমধ্যে '{name}' তে আছেন"
+
+merge_success     = "'{from}' কে '{onto}' তে একত্রিত করা হয়েছে — কমিট {hash}"
+merge_conflicts   = "একত্রীকরণে দ্বন্দ্ব আছে: {files}"
+merge_hint        = "  দ্বন্দ্ব সমাধান করে 'bait save' চালান।"
+merge_up_to_date  = "ইতোমধ্যে আপ টু ডেট।"
+merge_no_ancestor = "'{a}' এবং '{b}' এর মধ্যে কোনো সাধারণ পূর্বপুরুষ নেই"
+
+undo_success      = "পূর্বাবস্থায় ফেরানো হয়েছে: {op}"
+undo_nothing      = "পূর্বাবস্থায় ফেরানোর কিছু নেই।"
+
+clean_dry_header  = "নিচের শাখাগুলো মুছে ফেলা হবে (--yes দিয়ে নিশ্চিত করুন):"
+clean_dry_item    = "  {name} ({hash})"
+clean_done        = "{count} টি শাখা মুছে ফেলা হয়েছে।"
+clean_nothing     = "মুছে ফেলার কোনো শাখা নেই।"
+clean_kept        = "রাখা হয়েছে: {names}"
+
+remote_added      = "রিমোট '{name}' যোগ করা হয়েছে → {url}"
+remote_exists     = "রিমোট '{name}' ইতোমধ্যে বিদ্যমান"
+
+sync_no_remote    = "কোনো রিমোট কনফিগার করা নেই। প্রথমে 'bait remote add <নাম> <url>' চালান।"
+sync_local_done   = "স্থানীয় পাথের সাথে সিঙ্ক করা হয়েছে: {path}"
+sync_remote_done  = "রিমোটের সাথে সিঙ্ক করা হয়েছে: {url}"
+sync_up_to_date   = "ইতোমধ্যে আপ টু ডেট।"
+
+review_created    = "শাখা '{branch}' তে পর্যালোচনা #{id} তৈরি হয়েছে"
+review_list_empty = "কোনো খোলা পর্যালোচনা নেই।"
+
+err_not_a_repo    = "bait রিপোজিটরির ভেতরে নেই। তৈরি করতে 'bait init' চালান।"
+err_no_commits    = "এখনো কোনো কমিট নেই। প্রথমে 'bait save' চালান।"
+err_detached_head = "HEAD বিচ্ছিন্ন। প্রথমে কোনো শাখায় স্যুইচ করুন।"

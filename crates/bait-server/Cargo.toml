@@ -1,0 +1,22 @@
+[package]
+name        = "bait-server"
+version.workspace   = true
+edition.workspace   = true
+license.workspace   = true
+description = "BAIT HTTP server — self-hostable remote for bait repositories"
+
+[[bin]]
+name = "bait-server"
+path = "src/main.rs"
+
+[dependencies]
+bait-core        = { path = "../bait-core" }
+anyhow.workspace = true
+serde.workspace  = true
+serde_json.workspace = true
+axum.workspace   = true
+chrono.workspace = true
+tokio.workspace  = true
+tower.workspace  = true
+tower-http.workspace = true
+zstd.workspace   = true

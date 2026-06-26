@@ -1,0 +1,74 @@
+# BAIT — Telugu messages (తెలుగు)
+# రుషి = rushi (రచయిత), నారద = narada (సమీక్షకుడు)
+
+init_success = "{path} లో కొత్త bait రిపోజిటరీ సృష్టించబడింది"
+init_exists  = "{path} లో రిపోజిటరీ ఇప్పటికే ఉంది"
+
+add_staged   = "{count} ఫైల్(లు) స్టేజ్ చేయబడ్డాయి"
+add_no_match = "సరిపోలే ఫైళ్ళు కనుగొనబడలేదు: {pattern}"
+
+save_success     = "కమిట్ {hash} సేవ్ చేయబడింది"
+save_nothing     = "సేవ్ చేయడానికి ఏమీ లేదు (వర్కింగ్ కాపీ శుభ్రంగా ఉంది)"
+save_auto_snap   = "స్టేజ్ చేయబడిన ఫైళ్ళు లేవు — మొత్తం వర్కింగ్ డైరెక్టరీ స్నాప్‌షాట్ తీసుకోబడుతోంది"
+
+log_empty        = "ఇంకా కమిట్‌లు లేవు."
+log_commit_line  = "కమిట్ {hash}"
+log_rushi_line   = "రుషి:    {name} <{email}>"
+log_narada_line  = "నారద:   {name}"
+log_date_line    = "తేదీ:    {date}"
+log_msg_line     = "         {msg}"
+log_has_conflicts = "  (!) పరిష్కరించబడని వివాదాలు"
+
+status_clean         = "వర్కింగ్ కాపీ శుభ్రంగా ఉంది — సేవ్ చేయడానికి ఏమీ లేదు."
+status_staged_header = "స్టేజ్ చేయబడినవి (తదుపరి save లో చేర్చబడతాయి):"
+status_unstaged_header = "స్టేజ్ చేయబడని మార్పులు:"
+status_untracked_header = "ట్రాక్ చేయబడని ఫైళ్ళు ('bait add' ఉపయోగించండి):"
+status_added     = "  చేర్చబడింది:   {path}"
+status_modified  = "  మార్చబడింది:  {path}"
+status_deleted   = "  తొలగించబడింది: {path}"
+status_untracked = "  {path}"
+
+diff_no_changes   = "తేడాలు లేవు."
+diff_binary       = "బైనరీ ఫైళ్ళు వేరుగా ఉన్నాయి: {path}"
+
+branch_created    = "శాఖ '{name}' సృష్టించబడింది"
+branch_exists     = "శాఖ '{name}' ఇప్పటికే ఉంది"
+branch_not_found  = "శాఖ '{name}' కనుగొనబడలేదు"
+branch_deleted    = "శాఖ '{name}' తొలగించబడింది ({hash} గా ఉండేది)"
+branch_list_current = "* {name}"
+branch_list_other   = "  {name}"
+
+switch_success    = "శాఖ '{name}' కి మారబడింది"
+switch_not_found  = "అలాంటి శాఖ లేదు: '{name}'"
+switch_dirty      = "మారలేము — స్టేజ్ చేయబడని మార్పులు ఉన్నాయి."
+switch_same       = "మీరు ఇప్పటికే '{name}' లో ఉన్నారు"
+
+merge_success     = "'{from}' ని '{onto}' లో విలీనం చేయబడింది — కమిట్ {hash}"
+merge_conflicts   = "విలీనంలో వివాదాలు ఉన్నాయి: {files}"
+merge_hint        = "  వివాదాలను పరిష్కరించి 'bait save' అమలు చేయండి."
+merge_up_to_date  = "ఇప్పటికే అప్ టు డేట్."
+merge_no_ancestor = "'{a}' మరియు '{b}' మధ్య ఉమ్మడి పూర్వీకుడు లేదు"
+
+undo_success      = "రద్దు చేయబడింది: {op}"
+undo_nothing      = "రద్దు చేయడానికి ఏమీ లేదు."
+
+clean_dry_header  = "కింది శాఖలు తొలగించబడతాయి (--yes తో నిర్ధారించండి):"
+clean_dry_item    = "  {name} ({hash})"
+clean_done        = "{count} శాఖ(లు) తొలగించబడ్డాయి."
+clean_nothing     = "తొలగించడానికి శాఖలు లేవు."
+clean_kept        = "ఉంచబడినవి: {names}"
+
+remote_added      = "రిమోట్ '{name}' చేర్చబడింది → {url}"
+remote_exists     = "రిమోట్ '{name}' ఇప్పటికే ఉంది"
+
+sync_no_remote    = "రిమోట్ కాన్ఫిగర్ చేయబడలేదు. ముందు 'bait remote add <పేరు> <url>' అమలు చేయండి."
+sync_local_done   = "స్థానిక మార్గంతో సమకాలీకరించబడింది: {path}"
+sync_remote_done  = "రిమోట్‌తో సమకాలీకరించబడింది: {url}"
+sync_up_to_date   = "ఇప్పటికే అప్ టు డేట్."
+
+review_created    = "శాఖ '{branch}' లో సమీక్ష #{id} సృష్టించబడింది"
+review_list_empty = "తెరవబడిన సమీక్షలు లేవు."
+
+err_not_a_repo    = "bait రిపోజిటరీలో లేదు. సృష్టించడానికి 'bait init' అమలు చేయండి."
+err_no_commits    = "ఇంకా కమిట్‌లు లేవు. ముందు 'bait save' అమలు చేయండి."
+err_detached_head = "HEAD వేరుచేయబడింది. ముందు ఒక శాఖకు మారండి."
