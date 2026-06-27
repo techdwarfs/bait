@@ -248,7 +248,7 @@ fn is_indexable_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),
         Some(
-            // Systems
+            // Systems / native
             "rs" | "c" | "cc" | "cpp" | "cxx" | "c++" | "h" | "hpp" | "hxx"
             // JVM
             | "java" | "kt" | "kts" | "scala" | "groovy" | "gradle"
@@ -269,35 +269,473 @@ fn is_indexable_file(path: &Path) -> bool {
             // Shell
             | "sh" | "bash" | "zsh" | "fish"
             // Functional
-            | "ex" | "exs"          // Elixir
-            | "erl" | "hrl"         // Erlang
-            | "hs" | "lhs"          // Haskell
-            | "ml" | "mli"          // OCaml
+            | "ex" | "exs"            // Elixir
+            | "erl" | "hrl"           // Erlang
+            | "hs" | "lhs"            // Haskell
+            | "ml" | "mli"            // OCaml
             | "clj" | "cljs" | "cljc" // Clojure
             | "elm"
-            | "jl"                  // Julia
-            | "r" | "R"             // R
+            | "jl"                    // Julia
+            | "r" | "R"               // R
             | "lua"
             | "dart"
             // Data / query
             | "sql"
             | "graphql" | "gql"
             // Config-as-code
-            | "tf" | "tfvars"       // Terraform HCL
+            | "tf" | "tfvars"         // Terraform HCL
             | "bicep"
-            | "proto"               // Protobuf
+            | "proto"                 // Protobuf
         )
     )
 }
 
 fn module_name_for_path(path: &str) -> String {
     let path = path.replace('\\', "/");
-    let path = path.strip_suffix(".rs").or_else(|| path.rsplit_once('.').map(|(base, _)| base)).unwrap_or(&path);
+    let path = path
+        .strip_suffix(".rs")
+        .or_else(|| path.rsplit_once('.').map(|(base, _)| base))
+        .unwrap_or(&path);
     path.replace('/', "::")
 }
 
+// ─── Tree-sitter queries (one per language) ───────────────────────────────────
+// Capture names encode kind: fn / struct / enum / trait / mod / impl / type /
+// const / static / class / interface / method / var / ns / macro / decorator /
+// proto / ext / obj / record / pkg
+// Names starting with '_' are predicate-only helpers and are skipped.
+
+const Q_RUST: &str = r#"
+(function_item name: (identifier) @fn)
+(struct_item name: (type_identifier) @struct)
+(enum_item name: (type_identifier) @enum)
+(trait_item name: (type_identifier) @trait)
+(mod_item name: (identifier) @mod)
+(impl_item type: (type_identifier) @impl)
+(type_item name: (type_identifier) @type)
+(const_item name: (identifier) @const)
+(static_item name: (identifier) @static)
+(macro_definition name: (identifier) @macro)
+"#;
+
+const Q_PYTHON: &str = r#"
+(function_definition name: (identifier) @fn)
+(async_function_definition name: (identifier) @fn)
+(class_definition name: (identifier) @class)
+(decorator (identifier) @decorator)
+(decorator (call function: (identifier) @decorator))
+"#;
+
+const Q_JS: &str = r#"
+(function_declaration name: (identifier) @fn)
+(generator_function_declaration name: (identifier) @fn)
+(class_declaration name: (identifier) @class)
+(method_definition key: (property_identifier) @method)
+"#;
+
+const Q_TS: &str = r#"
+(function_declaration name: (identifier) @fn)
+(generator_function_declaration name: (identifier) @fn)
+(class_declaration name: (identifier) @class)
+(abstract_class_declaration name: (type_identifier) @class)
+(method_definition key: (property_identifier) @method)
+(interface_declaration name: (type_identifier) @interface)
+(type_alias_declaration name: (type_identifier) @type)
+(enum_declaration name: (identifier) @enum)
+"#;
+
+const Q_JAVA: &str = r#"
+(class_declaration name: (identifier) @class)
+(interface_declaration name: (identifier) @interface)
+(enum_declaration name: (identifier) @enum)
+(record_declaration name: (identifier) @record)
+(method_declaration name: (identifier) @method)
+(constructor_declaration name: (identifier) @fn)
+(annotation_type_declaration name: (identifier) @decorator)
+"#;
+
+const Q_GO: &str = r#"
+(function_declaration name: (identifier) @fn)
+(method_declaration name: (field_identifier) @method)
+(type_spec name: (type_identifier) @type)
+(const_spec name: (identifier) @const)
+(var_spec name: (identifier) @var)
+(package_clause (package_identifier) @pkg)
+"#;
+
+const Q_C: &str = r#"
+(function_definition declarator: (function_declarator declarator: (identifier) @fn))
+(struct_specifier name: (type_identifier) @struct)
+(union_specifier name: (type_identifier) @struct)
+(enum_specifier name: (type_identifier) @enum)
+(type_definition declarator: (type_identifier) @type)
+(preproc_def name: (identifier) @macro)
+(preproc_function_def name: (identifier) @macro)
+"#;
+
+const Q_CPP: &str = r#"
+(function_definition declarator: (function_declarator declarator: (identifier) @fn))
+(function_definition declarator: (function_declarator declarator: (qualified_identifier name: (identifier) @fn)))
+(class_specifier name: (type_identifier) @class)
+(struct_specifier name: (type_identifier) @struct)
+(union_specifier name: (type_identifier) @struct)
+(enum_specifier name: (type_identifier) @enum)
+(namespace_definition name: (namespace_identifier) @ns)
+(type_definition declarator: (type_identifier) @type)
+(preproc_def name: (identifier) @macro)
+(preproc_function_def name: (identifier) @macro)
+"#;
+
+const Q_CSHARP: &str = r#"
+(class_declaration name: (identifier) @class)
+(interface_declaration name: (identifier) @interface)
+(struct_declaration name: (identifier) @struct)
+(enum_declaration name: (identifier) @enum)
+(record_declaration name: (identifier) @record)
+(namespace_declaration name: (identifier) @ns)
+(method_declaration name: (identifier) @method)
+(constructor_declaration name: (identifier) @fn)
+(property_declaration name: (identifier) @var)
+(delegate_declaration name: (identifier) @type)
+"#;
+
+const Q_RUBY: &str = r#"
+(method name: (identifier) @fn)
+(singleton_method name: (identifier) @fn)
+(class name: (constant) @class)
+(module name: (constant) @mod)
+(assignment left: (constant) @const)
+"#;
+
+const Q_SCALA: &str = r#"
+(function_definition name: (identifier) @fn)
+(class_definition name: (identifier) @class)
+(object_definition name: (identifier) @obj)
+(trait_definition name: (identifier) @trait)
+(type_definition name: (type_identifier) @type)
+(val_definition pattern: (identifier) @const)
+(var_definition pattern: (identifier) @var)
+"#;
+
+const Q_PHP: &str = r#"
+(function_definition name: (name) @fn)
+(class_declaration name: (name) @class)
+(interface_declaration name: (name) @interface)
+(trait_declaration name: (name) @trait)
+(enum_declaration name: (name) @enum)
+(method_declaration name: (name) @method)
+"#;
+
+const Q_BASH: &str = r#"
+(function_definition name: (word) @fn)
+"#;
+
+const Q_ELIXIR: &str = r#"
+(call
+  target: (identifier) @_def
+  (arguments (call target: (identifier) @fn))
+  (#match? @_def "^def(p|macro)?$"))
+(call
+  target: (identifier) @_defm
+  (arguments (alias) @mod)
+  (#match? @_defm "^defmodule$"))
+(call
+  target: (identifier) @_defp
+  (arguments (alias) @proto)
+  (#match? @_defp "^defprotocol$"))
+"#;
+
+const Q_LUA: &str = r#"
+(function_declaration name: (identifier) @fn)
+(local_function_declaration name: (identifier) @fn)
+(assignment_statement
+  (variable_list (identifier) @fn)
+  (expression_list (function_definition)))
+"#;
+
+const Q_SWIFT: &str = r#"
+(function_declaration name: (simple_identifier) @fn)
+(class_declaration name: (type_identifier) @class)
+(struct_declaration name: (type_identifier) @struct)
+(enum_declaration name: (type_identifier) @enum)
+(protocol_declaration name: (type_identifier) @proto)
+(typealias_declaration name: (type_identifier) @type)
+(extension_declaration (user_type (type_identifier) @ext))
+"#;
+
+const Q_HASKELL: &str = r#"
+(function name: (variable) @fn)
+(data_type name: (type) @type)
+(newtype name: (type) @type)
+(type_synonym name: (type) @type)
+(class_declaration name: (type) @trait)
+"#;
+
+const Q_R: &str = r#"
+(left_assignment lhs: (identifier) @fn rhs: (function_definition))
+(equals_assignment lhs: (identifier) @fn rhs: (function_definition))
+"#;
+
+// ─── extract_symbols: try tree-sitter, fall back to line scanner ──────────────
+
 fn extract_symbols(content: &str, file: &str, module: &str) -> Vec<SymbolRecord> {
     let ext = file.rsplit('.').next().unwrap_or("");
+    if let Some(syms) = ts_extract(content, file, module, ext) {
+        return syms;
+    }
+    line_scan_symbols(content, file, module, ext)
+}
+
+// ─── Tree-sitter extraction ───────────────────────────────────────────────────
+
+fn ts_extract(content: &str, file: &str, module: &str, ext: &str) -> Option<Vec<SymbolRecord>> {
+    let (lang, query_src) = ts_lang_query(ext)?;
+    let src = content.as_bytes();
+
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&lang).ok()?;
+    let tree = parser.parse(src, None)?;
+
+    // Compile query; a bad query just means we fall through to line scanner
+    let query = tree_sitter::Query::new(&lang, query_src).ok()?;
+    let cap_names: Vec<String> = query.capture_names().iter().map(|s| s.to_string()).collect();
+
+    let mut cursor = tree_sitter::QueryCursor::new();
+    let mut out: Vec<SymbolRecord> = Vec::new();
+    let mut seen: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    use tree_sitter::StreamingIterator as _;
+    let mut matches = cursor.matches(&query, tree.root_node(), src);
+    while let Some(m) = matches.next() {
+        for cap in m.captures.iter() {
+            let cap_name = &cap_names[cap.index as usize];
+            if cap_name.starts_with('_') {
+                continue; // predicate-only capture
+            }
+            let node = cap.node;
+            if !seen.insert(node.id()) {
+                continue; // deduplicate same node matched by multiple patterns
+            }
+            let name = match node.utf8_text(src) {
+                Ok(n) if !n.is_empty() => n.to_string(),
+                _ => continue,
+            };
+            let line = node.start_position().row + 1;
+            let kind = ts_cap_kind(cap_name);
+            let is_public = ts_is_public(node, src, ext, &name, cap_name);
+            out.push(SymbolRecord {
+                name,
+                kind,
+                file: file.to_string(),
+                line,
+                module: module.to_string(),
+                is_public,
+                doc_summary: None,
+            });
+        }
+    }
+
+    Some(out)
+}
+
+fn ts_lang_query(ext: &str) -> Option<(tree_sitter::Language, &'static str)> {
+    match ext {
+        "rs" => Some((tree_sitter_rust::LANGUAGE.into(), Q_RUST)),
+        "py" | "pyi" | "pyw" => Some((tree_sitter_python::LANGUAGE.into(), Q_PYTHON)),
+        "js" | "jsx" | "mjs" | "cjs" => Some((tree_sitter_javascript::LANGUAGE.into(), Q_JS)),
+        "ts" | "vue" | "svelte" => {
+            Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), Q_TS))
+        }
+        "tsx" => Some((tree_sitter_typescript::LANGUAGE_TSX.into(), Q_TS)),
+        "java" => Some((tree_sitter_java::LANGUAGE.into(), Q_JAVA)),
+        "go" => Some((tree_sitter_go::LANGUAGE.into(), Q_GO)),
+        "c" | "h" => Some((tree_sitter_c::LANGUAGE.into(), Q_C)),
+        "cc" | "cpp" | "cxx" | "c++" | "hpp" | "hxx" => {
+            Some((tree_sitter_cpp::LANGUAGE.into(), Q_CPP))
+        }
+        "cs" => Some((tree_sitter_c_sharp::LANGUAGE.into(), Q_CSHARP)),
+        "rb" | "rake" | "gemspec" => Some((tree_sitter_ruby::LANGUAGE.into(), Q_RUBY)),
+        "scala" => Some((tree_sitter_scala::LANGUAGE.into(), Q_SCALA)),
+        "php" => Some((tree_sitter_php::LANGUAGE_PHP.into(), Q_PHP)),
+        "sh" | "bash" | "zsh" => Some((tree_sitter_bash::LANGUAGE.into(), Q_BASH)),
+        "ex" | "exs" => Some((tree_sitter_elixir::LANGUAGE.into(), Q_ELIXIR)),
+        "lua" => Some((tree_sitter_lua::LANGUAGE.into(), Q_LUA)),
+        "swift" => Some((tree_sitter_swift::LANGUAGE.into(), Q_SWIFT)),
+        "hs" | "lhs" => Some((tree_sitter_haskell::LANGUAGE.into(), Q_HASKELL)),
+        "r" | "R" => Some((tree_sitter_r::LANGUAGE.into(), Q_R)),
+        _ => None,
+    }
+}
+
+fn ts_cap_kind(cap: &str) -> SymbolKind {
+    match cap {
+        "fn" => SymbolKind::Function,
+        "struct" => SymbolKind::Struct,
+        "enum" => SymbolKind::Enum,
+        "trait" => SymbolKind::Trait,
+        "mod" => SymbolKind::Module,
+        "impl" => SymbolKind::Impl,
+        "type" => SymbolKind::Type,
+        "const" => SymbolKind::Const,
+        "static" => SymbolKind::Static,
+        "class" => SymbolKind::Class,
+        "interface" => SymbolKind::Interface,
+        "method" => SymbolKind::Method,
+        "var" => SymbolKind::Variable,
+        "ns" => SymbolKind::Namespace,
+        "macro" => SymbolKind::Macro,
+        "decorator" => SymbolKind::Decorator,
+        "proto" => SymbolKind::Protocol,
+        "ext" => SymbolKind::Extension,
+        "obj" => SymbolKind::Object,
+        "record" => SymbolKind::Record,
+        "pkg" => SymbolKind::Package,
+        _ => SymbolKind::Function,
+    }
+}
+
+fn ts_is_public(
+    node: tree_sitter::Node,
+    src: &[u8],
+    ext: &str,
+    name: &str,
+    cap: &str,
+) -> bool {
+    // Helper: text of a node
+    let text = |n: tree_sitter::Node| n.utf8_text(src).unwrap_or("").to_string();
+
+    match ext {
+        // ── Rust: item is pub if its first child is visibility_modifier ───────
+        "rs" => {
+            let item = node.parent().unwrap_or(node);
+            item.child(0)
+                .map(|c| c.kind() == "visibility_modifier")
+                .unwrap_or(false)
+        }
+
+        // ── Python: name starting with _ is private ───────────────────────────
+        "py" | "pyi" | "pyw" => !name.starts_with('_'),
+
+        // ── Go: exported if name starts with uppercase ────────────────────────
+        "go" => name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false),
+
+        // ── JS/TS: exported if inside export_statement ────────────────────────
+        "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "vue" | "svelte" => {
+            let mut n = node.parent();
+            for _ in 0..5 {
+                match n {
+                    Some(p) if p.kind() == "export_statement" => return true,
+                    Some(p) => n = p.parent(),
+                    None => break,
+                }
+            }
+            false
+        }
+
+        // ── Java: public or package-private (not private/protected) ──────────
+        "java" => {
+            let item = node.parent().unwrap_or(node);
+            for i in 0..item.child_count() {
+                if let Some(child) = item.child(i as u32) {
+                    if child.kind() == "modifiers" {
+                        let mods = text(child);
+                        return mods.contains("public")
+                            || (!mods.contains("private") && !mods.contains("protected"));
+                    }
+                }
+            }
+            true // package-private is accessible
+        }
+
+        // ── C#: private by default unless public keyword present ─────────────
+        "cs" => {
+            let item = node.parent().unwrap_or(node);
+            for i in 0..item.child_count() {
+                if let Some(child) = item.child(i as u32) {
+                    let k = child.kind();
+                    if k == "modifier" {
+                        let m = text(child);
+                        if m == "public" || m == "internal" {
+                            return true;
+                        }
+                        if m == "private" || m == "protected" {
+                            return false;
+                        }
+                    }
+                }
+            }
+            false
+        }
+
+        // ── C/C++: everything at file scope is public ─────────────────────────
+        "c" | "h" | "cc" | "cpp" | "cxx" | "c++" | "hpp" | "hxx" => true,
+
+        // ── Ruby: methods/constants are public by default ─────────────────────
+        "rb" | "rake" | "gemspec" => cap != "fn" || !name.starts_with('_'),
+
+        // ── PHP: public unless private/protected modifier present ─────────────
+        "php" => {
+            let item = node.parent().unwrap_or(node);
+            for i in 0..item.child_count() {
+                if let Some(child) = item.child(i as u32) {
+                    let k = child.kind();
+                    if k == "visibility_modifier" || k == "var_modifier" {
+                        let m = text(child);
+                        if m.contains("private") || m.contains("protected") {
+                            return false;
+                        }
+                        if m.contains("public") {
+                            return true;
+                        }
+                    }
+                }
+            }
+            true
+        }
+
+        // ── Swift: public/open = true; private/fileprivate = false; internal = false ──
+        "swift" => {
+            let item = node.parent().unwrap_or(node);
+            for i in 0..item.child_count() {
+                if let Some(child) = item.child(i as u32) {
+                    let m = text(child);
+                    if m == "public" || m == "open" {
+                        return true;
+                    }
+                    if m == "private" || m == "fileprivate" {
+                        return false;
+                    }
+                }
+            }
+            false // internal by default
+        }
+
+        // ── Scala/Kotlin: public by default unless prefix says otherwise ──────
+        "scala" | "kt" | "kts" => {
+            let item = node.parent().unwrap_or(node);
+            let item_text = text(item);
+            let prefix = &item_text[..item_text.find(name).unwrap_or(0)];
+            !prefix.contains("private ") && !prefix.contains("protected ")
+        }
+
+        // ── Elixir: defp is private ───────────────────────────────────────────
+        "ex" | "exs" => cap != "fn" || {
+            // The function's grandparent call should have target "def" not "defp"
+            let call = node.parent().and_then(|p| p.parent()).unwrap_or(node);
+            call.child_by_field_name("target")
+                .and_then(|t| t.utf8_text(src).ok())
+                .map(|t| t == "def")
+                .unwrap_or(true)
+        },
+
+        // ── Everything else: default to public ────────────────────────────────
+        _ => true,
+    }
+}
+
+// ─── Line-scanner fallback (SQL, GraphQL, Terraform, Protobuf, Kotlin, etc.) ──
+
+fn line_scan_symbols(content: &str, file: &str, module: &str, ext: &str) -> Vec<SymbolRecord> {
     let mut out = Vec::new();
     let mut pending_docs: Vec<String> = Vec::new();
     let mut in_block_comment = false;
@@ -305,47 +743,56 @@ fn extract_symbols(content: &str, file: &str, module: &str) -> Vec<SymbolRecord>
     for (idx, line) in content.lines().enumerate() {
         let trimmed = line.trim();
 
-        // ── Block comment tracking ─────────────────────────────────────────────
         if in_block_comment {
-            if trimmed.contains("*/") { in_block_comment = false; }
+            if trimmed.contains("*/") {
+                in_block_comment = false;
+            }
             continue;
         }
         if trimmed.starts_with("/*") {
-            // JavaDoc / C block — treat as doc if `/**`
             if trimmed.starts_with("/**") {
                 let text = trimmed.trim_start_matches('/').trim_start_matches('*').trim();
-                if !text.is_empty() { pending_docs.push(text.to_string()); }
+                if !text.is_empty() {
+                    pending_docs.push(text.to_string());
+                }
             }
-            if !trimmed.contains("*/") { in_block_comment = true; }
+            if !trimmed.contains("*/") {
+                in_block_comment = true;
+            }
             continue;
         }
         if trimmed.starts_with("* ") || trimmed == "*" {
-            // inside /** */ block
             let text = trimmed.trim_start_matches('*').trim();
             if !text.is_empty() && !text.starts_with('/') {
                 pending_docs.push(text.to_string());
             }
             continue;
         }
-
-        // ── Rust/JS/TS/C/Java // doc comments ─────────────────────────────────
         if trimmed.starts_with("///") || trimmed.starts_with("//!") {
             let text = trimmed[3..].trim();
-            if !text.is_empty() { pending_docs.push(text.to_string()); }
+            if !text.is_empty() {
+                pending_docs.push(text.to_string());
+            }
             continue;
         }
-
-        // ── Python / Ruby / Shell / Elixir # doc comments ─────────────────────
-        if trimmed.starts_with("##") && matches!(ext, "py"|"pyi"|"rb"|"rake"|"sh"|"bash"|"zsh"|"fish"|"ex"|"exs"|"r"|"R") {
+        if trimmed.starts_with("##")
+            && matches!(
+                ext,
+                "py" | "pyi" | "rb" | "rake" | "sh" | "bash" | "zsh" | "fish" | "ex" | "exs"
+                    | "r" | "R"
+            )
+        {
             let text = trimmed[2..].trim();
-            if !text.is_empty() { pending_docs.push(text.to_string()); }
+            if !text.is_empty() {
+                pending_docs.push(text.to_string());
+            }
             continue;
         }
-
-        // ── Skip blank / comment lines ─────────────────────────────────────────
         if trimmed.is_empty()
             || trimmed.starts_with("//")
-            || trimmed.starts_with('#') && !matches!(ext, "ex"|"exs"|"rb"|"rake"|"py"|"pyi"|"sh"|"bash"|"zsh"|"r"|"R") {
+            || (trimmed.starts_with('#')
+                && !matches!(ext, "ex" | "exs" | "rb" | "rake" | "py" | "pyi" | "sh" | "bash" | "zsh" | "r" | "R"))
+        {
             pending_docs.clear();
             continue;
         }
@@ -374,105 +821,20 @@ fn extract_symbols(content: &str, file: &str, module: &str) -> Vec<SymbolRecord>
     out
 }
 
+// ─── parse_symbol_line: handles Kotlin + SQL + GraphQL + Terraform + Protobuf ─
+
 fn parse_symbol_line(line: &str, ext: &str) -> Option<(SymbolKind, bool, String)> {
     let trimmed = line.trim_start();
 
-    // ── Python ────────────────────────────────────────────────────────────────
-    if matches!(ext, "py" | "pyi" | "pyw") {
-        if let Some(rest) = trimmed.strip_prefix("async def ").or_else(|| trimmed.strip_prefix("def ")) {
-            let name = ident(rest)?;
-            return Some((SymbolKind::Function, !name.starts_with('_'), name));
-        }
-        if let Some(rest) = trimmed.strip_prefix("class ") {
-            let name = ident(rest)?;
-            return Some((SymbolKind::Class, !name.starts_with('_'), name));
-        }
-        if trimmed.starts_with('@') { return Some((SymbolKind::Decorator, true, ident(&trimmed[1..])?)); }
-        if let Some((lhs, _)) = trimmed.split_once(" = ") {
-            let name = ident(lhs.trim())?;
-            if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                return Some((SymbolKind::Const, true, name));
-            }
-        }
-        return None;
-    }
-
-    // ── Ruby ──────────────────────────────────────────────────────────────────
-    if matches!(ext, "rb" | "rake" | "gemspec") {
-        if let Some(rest) = trimmed.strip_prefix("def self.").or_else(|| trimmed.strip_prefix("def ")) {
-            let name = ident(rest)?;
-            return Some((SymbolKind::Function, !name.starts_with('_'), name));
-        }
-        if let Some(rest) = trimmed.strip_prefix("class ") { return Some((SymbolKind::Class, true, ident(rest)?)); }
-        if let Some(rest) = trimmed.strip_prefix("module ") { return Some((SymbolKind::Module, true, ident(rest)?)); }
-        if let Some(rest) = trimmed.strip_prefix("attr_accessor :").or_else(|| trimmed.strip_prefix("attr_reader :")).or_else(|| trimmed.strip_prefix("attr_writer :")) {
-            return Some((SymbolKind::Variable, true, ident(rest)?));
-        }
-        if let Some((lhs, _)) = trimmed.split_once(" = ") {
-            let name = ident(lhs.trim())?;
-            if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                return Some((SymbolKind::Const, true, name));
-            }
-        }
-        return None;
-    }
-
-    // ── Go ────────────────────────────────────────────────────────────────────
-    if ext == "go" {
-        if trimmed.starts_with("package ") { return Some((SymbolKind::Package, true, ident(&trimmed[8..])?)); }
-        if let Some(rest) = trimmed.strip_prefix("func ") {
-            let name_part = if rest.starts_with('(') {
-                rest.find(')').and_then(|i| rest.get(i + 1..))?.trim_start()
-            } else { rest };
-            let name = ident(name_part)?;
-            let is_public = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-            return Some((SymbolKind::Function, is_public, name));
-        }
-        if let Some(rest) = trimmed.strip_prefix("type ") {
-            let name = ident(rest)?;
-            let is_public = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-            let kind = if rest.contains(" struct") { SymbolKind::Struct }
-                else if rest.contains(" interface") { SymbolKind::Interface }
-                else { SymbolKind::Type };
-            return Some((kind, is_public, name));
-        }
-        if trimmed.starts_with("var ") || trimmed.starts_with("const ") {
-            let rest = &trimmed[if trimmed.starts_with("var ") { 4 } else { 6 }..];
-            let name = ident(rest)?;
-            let is_public = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-            let kind = if trimmed.starts_with("const ") { SymbolKind::Const } else { SymbolKind::Variable };
-            return Some((kind, is_public, name));
-        }
-        return None;
-    }
-
-    // ── Swift ─────────────────────────────────────────────────────────────────
-    if ext == "swift" {
-        let norm = trimmed
-            .trim_start_matches("public ").trim_start_matches("private ").trim_start_matches("internal ")
-            .trim_start_matches("open ").trim_start_matches("fileprivate ").trim_start_matches("final ")
-            .trim_start_matches("override ").trim_start_matches("static ").trim_start_matches("class ")
-            .trim_start_matches("async ").trim_start_matches("mutating ");
-        let is_public = trimmed.starts_with("public ") || trimmed.starts_with("open ");
-        if let Some(r) = norm.strip_prefix("func ") { return Some((SymbolKind::Function, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("struct ") { return Some((SymbolKind::Struct, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("protocol ") { return Some((SymbolKind::Protocol, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("extension ") { return Some((SymbolKind::Extension, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("typealias ") { return Some((SymbolKind::Type, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("var ") { return Some((SymbolKind::Variable, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("let ") { return Some((SymbolKind::Const, is_public, ident(r)?)); }
-        return None;
-    }
-
-    // ── Kotlin ────────────────────────────────────────────────────────────────
+    // ── Kotlin (tree-sitter-kotlin <0.23, incompatible with our runtime) ──────
     if matches!(ext, "kt" | "kts") {
         let norm = trimmed
-            .trim_start_matches("public ").trim_start_matches("private ").trim_start_matches("protected ")
-            .trim_start_matches("internal ").trim_start_matches("open ").trim_start_matches("abstract ")
-            .trim_start_matches("sealed ").trim_start_matches("data ").trim_start_matches("inline ")
-            .trim_start_matches("suspend ").trim_start_matches("override ").trim_start_matches("companion ");
+            .trim_start_matches("public ").trim_start_matches("private ")
+            .trim_start_matches("protected ").trim_start_matches("internal ")
+            .trim_start_matches("open ").trim_start_matches("abstract ")
+            .trim_start_matches("sealed ").trim_start_matches("data ")
+            .trim_start_matches("inline ").trim_start_matches("suspend ")
+            .trim_start_matches("override ").trim_start_matches("companion ");
         let is_public = !trimmed.starts_with("private ") && !trimmed.starts_with("protected ");
         if let Some(r) = norm.strip_prefix("fun ") { return Some((SymbolKind::Function, is_public, ident(r)?)); }
         if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
@@ -485,160 +847,33 @@ fn parse_symbol_line(line: &str, ext: &str) -> Option<(SymbolKind, bool, String)
         return None;
     }
 
-    // ── Scala ─────────────────────────────────────────────────────────────────
-    if ext == "scala" {
-        let norm = trimmed.trim_start_matches("override ").trim_start_matches("abstract ")
-            .trim_start_matches("sealed ").trim_start_matches("case ").trim_start_matches("lazy ");
-        let is_public = !trimmed.starts_with("private ") && !trimmed.starts_with("protected ");
-        if let Some(r) = norm.strip_prefix("def ") { return Some((SymbolKind::Function, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("object ") { return Some((SymbolKind::Object, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("trait ") { return Some((SymbolKind::Trait, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("type ") { return Some((SymbolKind::Type, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("val ") { return Some((SymbolKind::Const, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("var ") { return Some((SymbolKind::Variable, is_public, ident(r)?)); }
-        return None;
-    }
-
-    // ── Java ──────────────────────────────────────────────────────────────────
-    if ext == "java" {
-        for vis in &["public ", "protected ", "private ", ""] {
-            let rest = if vis.is_empty() { trimmed } else { match trimmed.strip_prefix(vis) { Some(r) => r, None => continue } };
-            let is_public = *vis == "public " || vis.is_empty();
-            let norm = rest.trim_start_matches("static ").trim_start_matches("final ").trim_start_matches("abstract ").trim_start_matches("synchronized ").trim_start_matches("native ").trim_start_matches("default ");
-            if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
-            if let Some(r) = norm.strip_prefix("interface ") { return Some((SymbolKind::Interface, is_public, ident(r)?)); }
-            if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_public, ident(r)?)); }
-            if let Some(r) = norm.strip_prefix("record ") { return Some((SymbolKind::Record, is_public, ident(r)?)); }
-            if let Some(r) = norm.strip_prefix("@interface ") { return Some((SymbolKind::Decorator, is_public, ident(r)?)); }
-            if let Some(paren) = norm.find('(') {
-                let before = norm[..paren].trim();
-                let parts: Vec<&str> = before.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    if let Some(name) = ident(parts.last().unwrap_or(&"")) {
-                        if name.chars().next().map(|c| c.is_lowercase()).unwrap_or(false) {
-                            return Some((SymbolKind::Method, is_public, name));
-                        }
-                    }
-                }
-            }
-        }
-        return None;
-    }
-
-    // ── C# ────────────────────────────────────────────────────────────────────
-    if ext == "cs" {
-        let norm = trimmed
-            .trim_start_matches("public ").trim_start_matches("private ").trim_start_matches("protected ")
-            .trim_start_matches("internal ").trim_start_matches("static ").trim_start_matches("abstract ")
-            .trim_start_matches("virtual ").trim_start_matches("override ").trim_start_matches("sealed ")
-            .trim_start_matches("partial ").trim_start_matches("async ").trim_start_matches("readonly ");
-        let is_public = trimmed.starts_with("public ");
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("interface ") { return Some((SymbolKind::Interface, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("struct ") { return Some((SymbolKind::Struct, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("record ") { return Some((SymbolKind::Record, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("namespace ") { return Some((SymbolKind::Namespace, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("delegate ") { return Some((SymbolKind::Type, is_public, ident(r)?)); }
-        if let Some(paren) = norm.find('(') {
-            let before = norm[..paren].trim();
-            let parts: Vec<&str> = before.split_whitespace().collect();
-            if parts.len() >= 2 {
-                if let Some(name) = ident(parts.last().unwrap_or(&"")) {
-                    if !name.is_empty() { return Some((SymbolKind::Method, is_public, name)); }
-                }
-            }
-        }
-        return None;
-    }
-
-    // ── C / C++ ───────────────────────────────────────────────────────────────
-    if matches!(ext, "c" | "cc" | "cpp" | "cxx" | "c++" | "h" | "hpp" | "hxx") {
-        if let Some(rest) = trimmed.strip_prefix("#define ") { return Some((SymbolKind::Macro, true, ident(rest)?)); }
-        if let Some(rest) = trimmed.strip_prefix("namespace ") { return Some((SymbolKind::Namespace, true, ident(rest)?)); }
-        let norm = trimmed.trim_start_matches("static ").trim_start_matches("inline ").trim_start_matches("extern ").trim_start_matches("virtual ").trim_start_matches("explicit ");
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, true, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("struct ") { return Some((SymbolKind::Struct, true, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum class ").or_else(|| norm.strip_prefix("enum ")) { return Some((SymbolKind::Enum, true, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("typedef ") { return Some((SymbolKind::Type, true, ident(r)?)); }
-        if let Some(paren) = norm.find('(') {
-            let before = norm[..paren].trim();
-            let parts: Vec<&str> = before.split_whitespace().collect();
-            if parts.len() >= 2 {
-                if let Some(name) = ident(parts.last().unwrap_or(&"")) {
-                    if !name.is_empty() && !name.starts_with('*') {
-                        return Some((SymbolKind::Function, true, name));
-                    }
-                }
-            }
-        }
-        return None;
-    }
-
-    // ── PHP ───────────────────────────────────────────────────────────────────
-    if ext == "php" {
-        let norm = trimmed.trim_start_matches("public ").trim_start_matches("private ").trim_start_matches("protected ").trim_start_matches("static ").trim_start_matches("abstract ").trim_start_matches("final ");
-        let is_public = !trimmed.starts_with("private ") && !trimmed.starts_with("protected ");
-        if let Some(r) = norm.strip_prefix("function ") { return Some((SymbolKind::Function, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("interface ") { return Some((SymbolKind::Interface, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("trait ") { return Some((SymbolKind::Trait, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("const ") { return Some((SymbolKind::Const, is_public, ident(r)?)); }
-        return None;
-    }
-
-    // ── Shell ─────────────────────────────────────────────────────────────────
-    if matches!(ext, "sh" | "bash" | "zsh" | "fish") {
-        if let Some(rest) = trimmed.strip_prefix("function ") { return Some((SymbolKind::Function, true, ident(rest)?)); }
-        if let Some(paren) = trimmed.find("() {").or_else(|| trimmed.find("(){")) {
-            let name = ident(&trimmed[..paren])?;
-            if !name.is_empty() { return Some((SymbolKind::Function, true, name)); }
-        }
-        if let Some((lhs, _)) = trimmed.split_once('=') {
-            let name = ident(lhs.trim())?;
-            if name.chars().all(|c| c.is_uppercase() || c == '_') && name.len() > 1 {
-                return Some((SymbolKind::Variable, true, name));
-            }
-        }
-        return None;
-    }
-
-    // ── Elixir ────────────────────────────────────────────────────────────────
-    if matches!(ext, "ex" | "exs") {
-        if let Some(r) = trimmed.strip_prefix("defp ") { return Some((SymbolKind::Function, false, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("def ") { return Some((SymbolKind::Function, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("defmacro ") { return Some((SymbolKind::Macro, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("defmodule ") { return Some((SymbolKind::Module, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("defprotocol ") { return Some((SymbolKind::Protocol, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("defimpl ") { return Some((SymbolKind::Impl, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("defstruct ") { return Some((SymbolKind::Struct, true, ident(r)?)); }
-        return None;
-    }
-
     // ── SQL ───────────────────────────────────────────────────────────────────
     if ext == "sql" {
         let up = trimmed.to_uppercase();
         let find_after = |keyword: &str| -> Option<String> {
             up.find(keyword).and_then(|i| ident(&trimmed[i + keyword.len()..]))
         };
-        if up.contains("TABLE ") { return Some((SymbolKind::Struct, true, find_after("TABLE ")?)); }
-        if up.contains("VIEW ") { return Some((SymbolKind::Type, true, find_after("VIEW ")?)); }
-        if up.contains("FUNCTION ") { return Some((SymbolKind::Function, true, find_after("FUNCTION ")?)); }
-        if up.contains("PROCEDURE ") { return Some((SymbolKind::Function, true, find_after("PROCEDURE ")?)); }
+        if up.contains("TABLE ")     { return Some((SymbolKind::Struct,    true, find_after("TABLE ")?));     }
+        if up.contains("VIEW ")      { return Some((SymbolKind::Type,      true, find_after("VIEW ")?));      }
+        if up.contains("FUNCTION ")  { return Some((SymbolKind::Function,  true, find_after("FUNCTION ")?));  }
+        if up.contains("PROCEDURE ") { return Some((SymbolKind::Function,  true, find_after("PROCEDURE ")?)); }
         return None;
     }
 
     // ── GraphQL ───────────────────────────────────────────────────────────────
     if matches!(ext, "graphql" | "gql") {
         for (prefix, kind) in &[
-            ("type ", SymbolKind::Struct), ("interface ", SymbolKind::Interface),
-            ("enum ", SymbolKind::Enum), ("input ", SymbolKind::Struct),
-            ("union ", SymbolKind::Type), ("fragment ", SymbolKind::Function),
-            ("query ", SymbolKind::Function), ("mutation ", SymbolKind::Function),
-            ("subscription ", SymbolKind::Function), ("scalar ", SymbolKind::Type),
-            ("directive ", SymbolKind::Decorator),
+            ("type ",         SymbolKind::Struct),
+            ("interface ",    SymbolKind::Interface),
+            ("enum ",         SymbolKind::Enum),
+            ("input ",        SymbolKind::Struct),
+            ("union ",        SymbolKind::Type),
+            ("fragment ",     SymbolKind::Function),
+            ("query ",        SymbolKind::Function),
+            ("mutation ",     SymbolKind::Function),
+            ("subscription ", SymbolKind::Function),
+            ("scalar ",       SymbolKind::Type),
+            ("directive ",    SymbolKind::Decorator),
         ] {
             if let Some(rest) = trimmed.strip_prefix(prefix) {
                 return Some((kind.clone(), true, ident(rest)?));
@@ -647,26 +882,43 @@ fn parse_symbol_line(line: &str, ext: &str) -> Option<(SymbolKind, bool, String)
         return None;
     }
 
-    // ── Lua ───────────────────────────────────────────────────────────────────
-    if ext == "lua" {
-        if let Some(rest) = trimmed.strip_prefix("local function ").or_else(|| trimmed.strip_prefix("function ")) {
-            return Some((SymbolKind::Function, !trimmed.starts_with("local "), ident(rest)?));
+    // ── Terraform / Bicep ─────────────────────────────────────────────────────
+    if matches!(ext, "tf" | "tfvars" | "bicep") {
+        if let Some(rest) = trimmed.strip_prefix("resource \"") {
+            if let Some(name) = rest.splitn(3, '"').nth(2).and_then(|s| ident(s.trim_start_matches('"').trim())) {
+                return Some((SymbolKind::Struct, true, name));
+            }
         }
-        if let Some((lhs, _)) = trimmed.split_once(" = function") {
-            return Some((SymbolKind::Function, !trimmed.starts_with("local "), ident(lhs.trim_start_matches("local ").trim())?));
+        if let Some(rest) = trimmed.strip_prefix("variable \"") { return Some((SymbolKind::Variable, true, ident(rest)?)); }
+        if let Some(rest) = trimmed.strip_prefix("module \"")   { return Some((SymbolKind::Module,   true, ident(rest)?)); }
+        if ext == "bicep" {
+            if let Some(r) = trimmed.strip_prefix("param ")    { return Some((SymbolKind::Variable, true, ident(r)?)); }
+            if let Some(r) = trimmed.strip_prefix("var ")      { return Some((SymbolKind::Variable, true, ident(r)?)); }
+            if let Some(r) = trimmed.strip_prefix("resource ") { return Some((SymbolKind::Struct,   true, ident(r)?)); }
+            if let Some(r) = trimmed.strip_prefix("module ")   { return Some((SymbolKind::Module,   true, ident(r)?)); }
         }
         return None;
     }
 
-    // ── Dart ──────────────────────────────────────────────────────────────────
+    // ── Protobuf ──────────────────────────────────────────────────────────────
+    if ext == "proto" {
+        if let Some(r) = trimmed.strip_prefix("message ") { return Some((SymbolKind::Struct,    true, ident(r)?)); }
+        if let Some(r) = trimmed.strip_prefix("service ") { return Some((SymbolKind::Interface, true, ident(r)?)); }
+        if let Some(r) = trimmed.strip_prefix("enum ")    { return Some((SymbolKind::Enum,      true, ident(r)?)); }
+        if let Some(r) = trimmed.strip_prefix("rpc ")     { return Some((SymbolKind::Function,  true, ident(r)?)); }
+        return None;
+    }
+
+    // ── Dart (no tree-sitter crate available at compatible version) ────────────
     if ext == "dart" {
         let norm = trimmed
-            .trim_start_matches("abstract ").trim_start_matches("mixin ").trim_start_matches("base ")
-            .trim_start_matches("final ").trim_start_matches("interface ").trim_start_matches("sealed ");
+            .trim_start_matches("abstract ").trim_start_matches("mixin ")
+            .trim_start_matches("base ").trim_start_matches("final ")
+            .trim_start_matches("interface ").trim_start_matches("sealed ");
         let is_public = !trimmed.starts_with('_');
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("typedef ") { return Some((SymbolKind::Type, is_public, ident(r)?)); }
+        if let Some(r) = norm.strip_prefix("class ")     { return Some((SymbolKind::Class,     is_public, ident(r)?)); }
+        if let Some(r) = norm.strip_prefix("enum ")      { return Some((SymbolKind::Enum,      is_public, ident(r)?)); }
+        if let Some(r) = norm.strip_prefix("typedef ")   { return Some((SymbolKind::Type,      is_public, ident(r)?)); }
         if let Some(r) = norm.strip_prefix("extension ") { return Some((SymbolKind::Extension, is_public, ident(r)?)); }
         if let Some(paren) = norm.find('(') {
             let parts: Vec<&str> = norm[..paren].trim().split_whitespace().collect();
@@ -675,90 +927,24 @@ fn parse_symbol_line(line: &str, ext: &str) -> Option<(SymbolKind, bool, String)
         return None;
     }
 
-    // ── Protobuf ──────────────────────────────────────────────────────────────
-    if ext == "proto" {
-        if let Some(r) = trimmed.strip_prefix("message ") { return Some((SymbolKind::Struct, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("service ") { return Some((SymbolKind::Interface, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("enum ") { return Some((SymbolKind::Enum, true, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("rpc ") { return Some((SymbolKind::Function, true, ident(r)?)); }
+    // ── Shell (fish only — bash/sh/zsh handled by tree-sitter) ────────────────
+    if ext == "fish" {
+        if let Some(rest) = trimmed.strip_prefix("function ") { return Some((SymbolKind::Function, true, ident(rest)?)); }
         return None;
-    }
-
-    // ── Terraform / Bicep ─────────────────────────────────────────────────────
-    if matches!(ext, "tf" | "tfvars" | "bicep") {
-        if let Some(rest) = trimmed.strip_prefix("resource \"") {
-            // resource "type" "name" { -> use the name part (3rd token)
-            if let Some(name) = rest.splitn(3, '"').nth(2).and_then(|s| ident(s.trim_start_matches('"').trim())) {
-                return Some((SymbolKind::Struct, true, name));
-            }
-        }
-        if let Some(rest) = trimmed.strip_prefix("variable \"") { return Some((SymbolKind::Variable, true, ident(rest)?)); }
-        if let Some(rest) = trimmed.strip_prefix("module \"") { return Some((SymbolKind::Module, true, ident(rest)?)); }
-        if ext == "bicep" {
-            if let Some(r) = trimmed.strip_prefix("param ") { return Some((SymbolKind::Variable, true, ident(r)?)); }
-            if let Some(r) = trimmed.strip_prefix("var ") { return Some((SymbolKind::Variable, true, ident(r)?)); }
-            if let Some(r) = trimmed.strip_prefix("resource ") { return Some((SymbolKind::Struct, true, ident(r)?)); }
-            if let Some(r) = trimmed.strip_prefix("module ") { return Some((SymbolKind::Module, true, ident(r)?)); }
-        }
-        return None;
-    }
-
-    // ── Rust ──────────────────────────────────────────────────────────────────
-    if ext == "rs" {
-        let norm = trimmed
-            .trim_start_matches("pub(crate) ").trim_start_matches("pub(super) ")
-            .trim_start_matches("pub ").trim_start_matches("unsafe ").trim_start_matches("async ");
-        let is_public = trimmed.starts_with("pub");
-        if let Some(r) = norm.strip_prefix("fn ") { return Some((SymbolKind::Function, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("struct ") { return Some((SymbolKind::Struct, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("trait ") { return Some((SymbolKind::Trait, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("mod ") { return Some((SymbolKind::Module, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("impl ") { return Some((SymbolKind::Impl, true, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("type ") { return Some((SymbolKind::Type, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("const ") { return Some((SymbolKind::Const, is_public, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("static ") { return Some((SymbolKind::Static, is_public, ident(r)?)); }
-        if let Some(r) = trimmed.strip_prefix("macro_rules! ") { return Some((SymbolKind::Macro, true, ident(r)?)); }
-        return None;
-    }
-
-    // ── JavaScript / TypeScript (default fallthrough) ─────────────────────────
-    {
-        let is_export = trimmed.starts_with("export ") || trimmed.starts_with("export default ");
-        let norm = trimmed
-            .trim_start_matches("export default ")
-            .trim_start_matches("export ")
-            .trim_start_matches("declare ")
-            .trim_start_matches("abstract ")
-            .trim_start_matches("async ");
-        if let Some(r) = norm.strip_prefix("function ") { return Some((SymbolKind::Function, is_export, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("class ") { return Some((SymbolKind::Class, is_export, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("interface ") { return Some((SymbolKind::Interface, is_export, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("enum ") { return Some((SymbolKind::Enum, is_export, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("type ") { return Some((SymbolKind::Type, is_export, ident(r)?)); }
-        if let Some(r) = norm.strip_prefix("namespace ") { return Some((SymbolKind::Namespace, is_export, ident(r)?)); }
-        if trimmed.starts_with('@') { return Some((SymbolKind::Decorator, true, ident(&trimmed[1..])?)); }
-        for prefix in ["const ", "let ", "var "] {
-            if let Some(rest) = norm.strip_prefix(prefix) {
-                let name = ident(rest)?;
-                let after = rest[name.len()..].trim_start();
-                if is_export { return Some((SymbolKind::Const, true, name)); }
-                if after.starts_with("= (") || after.starts_with("= async (") || after.starts_with("= function") {
-                    return Some((SymbolKind::Function, false, name));
-                }
-            }
-        }
     }
 
     None
 }
 
-/// Extract a valid identifier (alphanumeric + `_`) from the start of `s`.
 fn ident(s: &str) -> Option<String> {
     let s = s.trim_start();
     let mut name = String::new();
     for ch in s.chars() {
-        if ch.is_alphanumeric() || ch == '_' { name.push(ch); } else { break; }
+        if ch.is_alphanumeric() || ch == '_' {
+            name.push(ch);
+        } else {
+            break;
+        }
     }
     if name.is_empty() { None } else { Some(name) }
 }
