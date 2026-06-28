@@ -631,8 +631,10 @@ impl Repository {
                 }
 
                 let data = std::fs::read(path)?;
-                // For status, we just need the hash — don't store in the object store.
-                let hash_bytes = *blake3::hash(&data).as_bytes();
+                // Hash must match write_blob: blake3(bincode(Blob { data }))
+                let blob = crate::objects::Blob { data: data.to_vec() };
+                let blob_bytes = bincode::serialize(&blob).context("failed to serialise blob for hash")?;
+                let hash_bytes = *blake3::hash(&blob_bytes).as_bytes();
                 let hash = Hash(hash_bytes);
                 map.insert(rel.clone(), hash.clone());
 
